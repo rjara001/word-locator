@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Settings, List, Plus, Trash2, ChevronRight, Highlighter, Info } from 'lucide-react';
+import { Search, Settings, List, Plus, Trash2, ChevronRight, Highlighter, Info, RefreshCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, Match, DEFAULT_STATE } from './types';
 
@@ -9,22 +9,43 @@ export default function App() {
   const [newWord, setNewWord] = useState('');
   const [activeTab, setActiveTab] = useState<'matches' | 'settings'>('matches');
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchMatches = () => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_MATCHES' }, (response) => {
+            if (response?.matches) {
+              setMatches(response.matches);
+            }
+          });
+        }
+      });
+    }
+  };
+
+  const refreshSearch = () => {
+    setIsRefreshing(true);
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'STATE_CHANGED' });
+          // Esperar un poco a que termine la búsqueda antes de pedir los resultados
+          setTimeout(() => {
+            fetchMatches();
+            setIsRefreshing(false);
+          }, 1500);
+        } else {
+          setIsRefreshing(false);
+        }
+      });
+    } else {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchMatches = () => {
-      if (typeof chrome !== 'undefined' && chrome.tabs) {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_MATCHES' }, (response) => {
-              if (response?.matches) {
-                setMatches(response.matches);
-              }
-            });
-          }
-        });
-      }
-    };
-
     // Cargar estado desde storage
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get(['appState'], (result) => {
@@ -178,6 +199,14 @@ export default function App() {
                   <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                     Resultados en esta página ({matches.length})
                   </h2>
+                  <button 
+                    onClick={refreshSearch}
+                    disabled={isRefreshing}
+                    className={`p-1.5 rounded-md transition-all hover:bg-zinc-100 text-zinc-500 hover:text-indigo-600 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`}
+                    title="Refrescar búsqueda"
+                  >
+                    <RefreshCcw className="w-3.5 h-3.5" />
+                  </button>
                 </div>
                 
                 <div className="space-y-2">
