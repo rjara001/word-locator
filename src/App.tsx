@@ -37,11 +37,13 @@ export default function App() {
   }, []);
 
   const saveState = (newState: AppState) => {
+    console.log('[Word Locator] Guardando nuevo estado:', newState);
     setState(newState);
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.set({ appState: newState }, () => {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (tabs[0]?.id) {
+            console.log('[Word Locator] Enviando mensaje STATE_CHANGED a la pestaña:', tabs[0].id);
             chrome.tabs.sendMessage(tabs[0].id, { type: 'STATE_CHANGED' });
           }
         });

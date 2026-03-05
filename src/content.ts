@@ -11,8 +11,33 @@ async function getAppState(): Promise<AppState> {
   });
 }
 
+function log(message: string, data?: any) {
+  console.log(`[Word Locator] ${message}`, data || '');
+}
+
+function getAccentInsensitivePattern(text: string): string {
+  const accentMap: { [key: string]: string } = {
+    'a': '[aáàâäãå]',
+    'e': '[eéèêë]',
+    'i': '[iíìîï]',
+    'o': '[oóòôöõ]',
+    'u': '[uúùûü]',
+    'c': '[cç]',
+    'n': '[nñ]'
+  };
+  // Escapar caracteres especiales de regex primero
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').toLowerCase();
+  // Reemplazar espacios por \s+ para ignorar múltiples espacios
+  const withFlexibleSpaces = escaped.replace(/\s+/g, '\\s+');
+  // Aplicar mapa de acentos
+  return withFlexibleSpaces.split('').map(char => accentMap[char] || char).join('');
+}
+
 function findMatches(state: AppState) {
+  log('Iniciando búsqueda con palabras:', state.targetWords);
+  
   if (state.targetWords.length === 0) {
+    log('No hay palabras para buscar.');
     matches = [];
     updateBadge(0);
     return;
@@ -25,17 +50,20 @@ function findMatches(state: AppState) {
   while ((node = walker.nextNode())) {
     const text = node.textContent || '';
     state.targetWords.forEach((word) => {
-      if (!word.trim()) return;
+      const trimmedWord = word.trim();
+      if (!trimmedWord) return;
       
-      const regex = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const pattern = getAccentInsensitivePattern(trimmedWord);
+      const regex = new RegExp(pattern, 'gi');
+      
       let match;
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
-        if (parent && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE') {
+        if (parent && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE' && !parent.classList.contains('word-locator-highlight')) {
           newMatches.push({
             id: `match-${newMatches.length}`,
             text: word,
-            context: text.substring(Math.max(0, match.index - 20), Math.min(text.length, match.index + word.length + 20)),
+            context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
             selector: getUniqueSelector(parent),
             index: match.index
           });
@@ -44,8 +72,10 @@ function findMatches(state: AppState) {
     });
   }
 
+  log(`Búsqueda finalizada. Encontradas ${newMatches.length} coincidencias.`);
   matches = newMatches;
   updateBadge(matches.length);
+  
   if (state.isHighlightEnabled) {
     applyHighlights(state);
   }
@@ -74,8 +104,11 @@ function getUniqueSelector(el: HTMLElement): string {
 }
 
 function applyHighlights(state: AppState) {
-  // Limpiar resaltados anteriores
-  document.querySelectorAll('.word-locator-highlight').forEach(el => {
+  log('Aplicando resaltado...');
+  
+  // Limpiar resaltados anteriores de forma más segura
+  const existingHighlights = document.querySelectorAll('.word-locator-highlight');
+  existingHighlights.forEach(el => {
     const parent = el.parentNode;
     if (parent) {
       parent.replaceChild(document.createTextNode(el.textContent || ''), el);
@@ -85,23 +118,37 @@ function applyHighlights(state: AppState) {
 
   if (!state.isHighlightEnabled || state.targetWords.length === 0) return;
 
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-  const nodes = [];
+  // Usar un TreeWalker para encontrar nodos de texto que NO estén ya en un resaltado
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const parent = node.parentElement;
+      if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.classList.contains('word-locator-highlight'))) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const textNodes = [];
   let node;
   while ((node = walker.nextNode())) {
-    nodes.push(node);
+    textNodes.push(node);
   }
 
-  nodes.forEach(textNode => {
+  textNodes.forEach(textNode => {
     const text = textNode.textContent || '';
     let hasMatch = false;
-    let html = text;
+    let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     state.targetWords.forEach(word => {
-      if (!word.trim()) return;
-      const regex = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const trimmedWord = word.trim();
+      if (!trimmedWord) return;
+      
+      const pattern = getAccentInsensitivePattern(trimmedWord);
+      const regex = new RegExp(`(${pattern})`, 'gi');
+      
       if (regex.test(html)) {
-        html = html.replace(regex, `<mark class="word-locator-highlight" style="background-color: ${state.highlightColor}; color: black; padding: 0 2px; border-radius: 2px;">$1</mark>`);
+        html = html.replace(regex, `<mark class="word-locator-highlight" style="background-color: ${state.highlightColor}; color: black; padding: 0 2px; border-radius: 2px; font-weight: bold; border-bottom: 1px solid rgba(0,0,0,0.2);">$1</mark>`);
         hasMatch = true;
       }
     });
@@ -112,6 +159,7 @@ function applyHighlights(state: AppState) {
       textNode.parentNode?.replaceChild(span, textNode);
     }
   });
+  log('Resaltado completado.');
 }
 
 function updateBadge(count: number) {
