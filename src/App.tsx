@@ -117,6 +117,17 @@ export default function App() {
     }
   };
 
+  const groupedMatches = React.useMemo(() => {
+    const groups: Record<string, Match[]> = {};
+    matches.forEach(match => {
+      if (!groups[match.text]) {
+        groups[match.text] = [];
+      }
+      groups[match.text].push(match);
+    });
+    return groups;
+  }, [matches]);
+
   if (isLoading) return <div className="w-[400px] h-[500px] flex items-center justify-center bg-zinc-50">
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
   </div>;
@@ -209,24 +220,35 @@ export default function App() {
                   </button>
                 </div>
                 
-                <div className="space-y-2">
-                  {matches.length > 0 ? (
-                    matches.map((match) => (
-                      <button
-                        key={match.id}
-                        onClick={() => scrollToMatch(match.selector)}
-                        className="w-full text-left p-3 bg-white border border-zinc-200 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all group"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-bold text-indigo-600 px-1.5 py-0.5 bg-indigo-50 rounded">
-                            {match.text}
+                <div className="space-y-4">
+                  {Object.keys(groupedMatches).length > 0 ? (
+                    Object.entries(groupedMatches).map(([word, wordMatches]: [string, Match[]]) => (
+                      <div key={word} className="space-y-2">
+                        <div className="flex items-center gap-2 px-1">
+                          <span className="text-xs font-bold text-indigo-600 px-1.5 py-0.5 bg-indigo-50 rounded border border-indigo-100">
+                            {word}
                           </span>
-                          <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                          <span className="text-[10px] font-medium text-zinc-400 uppercase">
+                            {wordMatches.length} {wordMatches.length === 1 ? 'coincidencia' : 'coincidencias'}
+                          </span>
                         </div>
-                        <p className="text-sm text-zinc-600 line-clamp-2 italic">
-                          "...{match.context}..."
-                        </p>
-                      </button>
+                        <div className="space-y-1.5 pl-2 border-l-2 border-zinc-100 ml-1">
+                          {wordMatches.map((match) => (
+                            <button
+                              key={match.id}
+                              onClick={() => scrollToMatch(match.selector)}
+                              className="w-full text-left p-2.5 bg-white border border-zinc-200 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all group"
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs text-zinc-600 line-clamp-2 italic flex-1">
+                                  "...{match.context}..."
+                                </p>
+                                <ChevronRight className="w-3.5 h-3.5 text-zinc-300 group-hover:text-indigo-500 transition-colors shrink-0 ml-2" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))
                   ) : (
                     <div className="py-8 text-center space-y-2">
