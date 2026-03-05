@@ -60,7 +60,8 @@ function findMatches(state: AppState) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) => {
         const parent = node.parentElement;
-        if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.classList.contains('word-locator-highlight'))) {
+        // Solo rechazamos scripts y estilos. Permitimos buscar dentro de nuestros propios resaltados.
+        if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) {
           return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
@@ -97,6 +98,7 @@ function findMatches(state: AppState) {
     matches = newMatches;
     updateBadge(matches.length);
     
+    // Solo aplicamos resaltados si no estamos ya en medio de uno (aunque isProcessing ya lo cubre)
     if (state.isHighlightEnabled) {
       applyHighlights(state);
     }
