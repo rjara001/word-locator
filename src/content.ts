@@ -4,11 +4,21 @@ let matches: Match[] = [];
 let observer: MutationObserver | null = null;
 let isProcessing = false;
 let searchTimeout: number | null = null;
+let currentAppState: AppState | null = null;
 
 async function getAppState(): Promise<AppState> {
   return new Promise((resolve) => {
     chrome.storage.local.get(['appState'], (result) => {
-      resolve(result.appState as AppState);
+      const state = result.appState as AppState;
+      if (state && state.targetWords && state.targetWords.length > 0 && typeof (state.targetWords[0] as any) === 'string') {
+        // Normalizar formato antiguo
+        state.targetWords = (state.targetWords as any).map((w: string) => ({
+          text: w,
+          enabled: true,
+          color: state.highlightColor || '#ffff00'
+        }));
+      }
+      resolve(state);
     });
   });
 }
@@ -71,9 +81,19 @@ function findMatches(state: AppState) {
     let node;
     while ((node = walker.nextNode())) {
       const text = node.textContent || '';
-    state.targetWords.forEach((wordObj) => {
-      if (!wordObj.enabled) return;
-      const trimmedWord = wordObj.text.trim();
+    state.targetWords.forEach((word) => {
+      let textToSearch = '';
+      let isEnabled = true;
+
+      if (typeof word === 'string') {
+        textToSearch = word;
+      } else if (word && typeof word === 'object') {
+        textToSearch = word.text;
+        isEnabled = word.enabled;
+      }
+
+      if (!isEnabled) return;
+      const trimmedWord = textToSearch.trim();
       if (!trimmedWord) return;
       
       const pattern = getAccentInsensitivePattern(trimmedWord);
@@ -85,7 +105,7 @@ function findMatches(state: AppState) {
         if (parent) {
           newMatches.push({
             id: `match-${newMatches.length}`,
-            text: wordObj.text,
+            text: textToSearch,
             context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
             selector: getUniqueSelector(parent),
             index: match.index
@@ -173,16 +193,28 @@ function applyHighlights(state: AppState) {
     let hasMatch = false;
     let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    state.targetWords.forEach(wordObj => {
-      if (!wordObj.enabled) return;
-      const trimmedWord = wordObj.text.trim();
+    state.targetWords.forEach(word => {
+      let textToSearch = '';
+      let isEnabled = true;
+      let color = state.highlightColor || '#ffff00';
+
+      if (typeof word === 'string') {
+        textToSearch = word;
+      } else if (word && typeof word === 'object') {
+        textToSearch = word.text;
+        isEnabled = word.enabled;
+        color = word.color || color;
+      }
+
+      if (!isEnabled) return;
+      const trimmedWord = textToSearch.trim();
       if (!trimmedWord) return;
       
       const pattern = getAccentInsensitivePattern(trimmedWord);
       const regex = new RegExp(`(${pattern})`, 'gi');
       
       if (regex.test(html)) {
-        html = html.replace(regex, `<mark class="word-locator-highlight" style="background-color: ${wordObj.color}; color: black; padding: 0 2px; border-radius: 2px; font-weight: bold; border-bottom: 1px solid rgba(0,0,0,0.2);">$1</mark>`);
+        html = html.replace(regex, `<mark class="word-locator-highlight" style="background-color: ${color}; color: black; padding: 0 2px; border-radius: 2px; font-weight: bold; border-bottom: 1px solid rgba(0,0,0,0.2);">$1</mark>`);
         hasMatch = true;
       }
     });
@@ -200,9 +232,11 @@ function updateBadge(count: number) {
   chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count, matches });
 }
 
-const debouncedFindMatches = debounce((state: AppState) => {
-  findMatches(state);
-}, 1000); // Esperar 1 segundo de inactividad antes de buscar
+const debouncedFindMatches = debounce(() => {
+  if (currentAppState) {
+    findMatches(currentAppState);
+  }
+}, 1000);
 
 // Escuchar mensajes del popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -220,17 +254,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.error('[Word Locator] Error al hacer scroll:', e);
     }
   } else if (message.type === 'STATE_CHANGED') {
-    getAppState().then(findMatches);
+    getAppState().then(state => {
+      currentAppState = state;
+      findMatches(state);
+    });
   }
 });
 
 // Inicializar
 getAppState().then(state => {
+  currentAppState = state;
   findMatches(state);
   
   if (observer) observer.disconnect();
   observer = new MutationObserver(() => {
-    debouncedFindMatches(state);
+    debouncedFindMatches();
   });
   observer.observe(document.body, { childList: true, subtree: true });
 });

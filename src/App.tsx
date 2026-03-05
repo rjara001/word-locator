@@ -51,6 +51,7 @@ export default function App() {
       chrome.storage.local.get(['appState'], (result) => {
         if (result.appState) {
           const loadedState = result.appState as AppState;
+          let migrated = false;
           // Migración: si targetWords es un array de strings, convertir a objetos
           if (loadedState.targetWords && loadedState.targetWords.length > 0 && typeof (loadedState.targetWords[0] as any) === 'string') {
             loadedState.targetWords = (loadedState.targetWords as any).map((w: string) => ({
@@ -58,8 +59,12 @@ export default function App() {
               enabled: true,
               color: loadedState.highlightColor || '#ffff00'
             }));
+            migrated = true;
           }
           setState(loadedState);
+          if (migrated) {
+            chrome.storage.local.set({ appState: loadedState });
+          }
         }
         setIsLoading(false);
       });
@@ -172,7 +177,10 @@ export default function App() {
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
             <Search className="w-5 h-5 text-white" />
           </div>
-          <h1 className="font-bold text-lg tracking-tight">Word Locator</h1>
+          <div className="flex flex-col">
+            <h1 className="font-bold text-lg leading-tight tracking-tight">Word Locator</h1>
+            <span className="text-[10px] text-zinc-400 font-medium -mt-0.5">v1.0.6</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-zinc-100 p-1 rounded-lg">
@@ -396,7 +404,7 @@ export default function App() {
       {/* Footer */}
       <footer className="px-4 py-3 bg-white border-t border-zinc-200 flex items-center justify-center shrink-0">
         <p className="text-[10px] text-zinc-400 font-medium tracking-widest uppercase">
-          Word Locator v1.0
+          Word Locator v1.0.6
         </p>
       </footer>
     </div>
