@@ -179,7 +179,7 @@ export default function App() {
           </div>
           <div className="flex flex-col">
             <h1 className="font-bold text-lg leading-tight tracking-tight">Word Locator</h1>
-            <span className="text-[10px] text-zinc-400 font-medium -mt-0.5">v1.0.6</span>
+            <span className="text-[10px] text-zinc-400 font-medium -mt-0.5">v1.0.7</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -404,7 +404,7 @@ export default function App() {
       {/* Footer */}
       <footer className="px-4 py-3 bg-white border-t border-zinc-200 flex items-center justify-center shrink-0">
         <p className="text-[10px] text-zinc-400 font-medium tracking-widest uppercase">
-          Word Locator v1.0.6
+          Word Locator v1.0.7
         </p>
       </footer>
     </div>

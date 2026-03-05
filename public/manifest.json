@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Word Locator",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Localiza palabras y frases clave en cualquier página web.",
   "permissions": ["storage", "tabs", "activeTab", "scripting"],
   "action": {
