@@ -1,0 +1,5 @@
+{
+  "name": "Word Locator",
+  "description": "Localiza palabras y frases clave en cualquier página web, con resaltado automático y navegación rápida.",
+  "requestFramePermissions": []
+}
