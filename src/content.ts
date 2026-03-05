@@ -71,27 +71,28 @@ function findMatches(state: AppState) {
     let node;
     while ((node = walker.nextNode())) {
       const text = node.textContent || '';
-      state.targetWords.forEach((word) => {
-        const trimmedWord = word.trim();
-        if (!trimmedWord) return;
-        
-        const pattern = getAccentInsensitivePattern(trimmedWord);
-        const regex = new RegExp(pattern, 'gi');
-        
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-          const parent = node.parentElement;
-          if (parent) {
-            newMatches.push({
-              id: `match-${newMatches.length}`,
-              text: word,
-              context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
-              selector: getUniqueSelector(parent),
-              index: match.index
-            });
-          }
+    state.targetWords.forEach((wordObj) => {
+      if (!wordObj.enabled) return;
+      const trimmedWord = wordObj.text.trim();
+      if (!trimmedWord) return;
+      
+      const pattern = getAccentInsensitivePattern(trimmedWord);
+      const regex = new RegExp(pattern, 'gi');
+      
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const parent = node.parentElement;
+        if (parent) {
+          newMatches.push({
+            id: `match-${newMatches.length}`,
+            text: wordObj.text,
+            context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
+            selector: getUniqueSelector(parent),
+            index: match.index
+          });
         }
-      });
+      }
+    });
     }
 
     log(`Búsqueda finalizada. Encontradas ${newMatches.length} coincidencias.`);
@@ -172,15 +173,16 @@ function applyHighlights(state: AppState) {
     let hasMatch = false;
     let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    state.targetWords.forEach(word => {
-      const trimmedWord = word.trim();
+    state.targetWords.forEach(wordObj => {
+      if (!wordObj.enabled) return;
+      const trimmedWord = wordObj.text.trim();
       if (!trimmedWord) return;
       
       const pattern = getAccentInsensitivePattern(trimmedWord);
       const regex = new RegExp(`(${pattern})`, 'gi');
       
       if (regex.test(html)) {
-        html = html.replace(regex, `<mark class="word-locator-highlight" style="background-color: ${state.highlightColor}; color: black; padding: 0 2px; border-radius: 2px; font-weight: bold; border-bottom: 1px solid rgba(0,0,0,0.2);">$1</mark>`);
+        html = html.replace(regex, `<mark class="word-locator-highlight" style="background-color: ${wordObj.color}; color: black; padding: 0 2px; border-radius: 2px; font-weight: bold; border-bottom: 1px solid rgba(0,0,0,0.2);">$1</mark>`);
         hasMatch = true;
       }
     });

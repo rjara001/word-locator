@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Settings, List, Plus, Trash2, ChevronRight, Highlighter, Info, RefreshCcw } from 'lucide-react';
+import { Search, Settings, List, Plus, Trash2, ChevronRight, Highlighter, Info, RefreshCcw, Maximize2, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, Match, DEFAULT_STATE } from './types';
 
@@ -50,7 +50,16 @@ export default function App() {
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get(['appState'], (result) => {
         if (result.appState) {
-          setState(result.appState);
+          const loadedState = result.appState as AppState;
+          // Migración: si targetWords es un array de strings, convertir a objetos
+          if (loadedState.targetWords && loadedState.targetWords.length > 0 && typeof (loadedState.targetWords[0] as any) === 'string') {
+            loadedState.targetWords = (loadedState.targetWords as any).map((w: string) => ({
+              text: w,
+              enabled: true,
+              color: loadedState.highlightColor || '#ffff00'
+            }));
+          }
+          setState(loadedState);
         }
         setIsLoading(false);
       });
@@ -89,20 +98,37 @@ export default function App() {
   };
 
   const addWord = () => {
-    if (newWord.trim() && !state.targetWords.includes(newWord.trim())) {
-      const newState = {
+    const trimmed = newWord.trim();
+    if (trimmed && !state.targetWords.some(w => w.text === trimmed)) {
+      const newState: AppState = {
         ...state,
-        targetWords: [...state.targetWords, newWord.trim()]
+        targetWords: [...state.targetWords, { text: trimmed, enabled: true, color: state.highlightColor }]
       };
       saveState(newState);
       setNewWord('');
     }
   };
 
-  const removeWord = (word: string) => {
-    const newState = {
+  const removeWord = (text: string) => {
+    const newState: AppState = {
       ...state,
-      targetWords: state.targetWords.filter(w => w !== word)
+      targetWords: state.targetWords.filter(w => w.text !== text)
+    };
+    saveState(newState);
+  };
+
+  const toggleWord = (text: string) => {
+    const newState: AppState = {
+      ...state,
+      targetWords: state.targetWords.map(w => w.text === text ? { ...w, enabled: !w.enabled } : w)
+    };
+    saveState(newState);
+  };
+
+  const updateWordColor = (text: string, color: string) => {
+    const newState: AppState = {
+      ...state,
+      targetWords: state.targetWords.map(w => w.text === text ? { ...w, color } : w)
     };
     saveState(newState);
   };
@@ -128,12 +154,18 @@ export default function App() {
     return groups;
   }, [matches]);
 
-  if (isLoading) return <div className="w-[400px] h-[500px] flex items-center justify-center bg-zinc-50">
+  const openFullWindow = () => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+    }
+  };
+
+  if (isLoading) return <div className="w-[600px] h-[600px] flex items-center justify-center bg-zinc-50">
     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
   </div>;
 
   return (
-    <div className="w-[400px] h-[500px] flex flex-col bg-zinc-50 text-zinc-900 font-sans overflow-hidden">
+    <div className="w-[600px] min-h-[600px] h-screen flex flex-col bg-zinc-50 text-zinc-900 font-sans overflow-hidden mx-auto shadow-2xl">
       {/* Header */}
       <header className="px-4 py-3 bg-white border-b border-zinc-200 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -142,18 +174,29 @@ export default function App() {
           </div>
           <h1 className="font-bold text-lg tracking-tight">Word Locator</h1>
         </div>
-        <div className="flex bg-zinc-100 p-1 rounded-lg">
+        <div className="flex items-center gap-2">
+          <div className="flex bg-zinc-100 p-1 rounded-lg">
+            <button 
+              onClick={() => setActiveTab('matches')}
+              className={`p-1.5 rounded-md transition-all ${activeTab === 'matches' ? 'bg-white shadow-sm text-indigo-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+              title="Resultados"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className={`p-1.5 rounded-md transition-all ${activeTab === 'settings' ? 'bg-white shadow-sm text-indigo-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+              title="Configuración"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
           <button 
-            onClick={() => setActiveTab('matches')}
-            className={`p-1.5 rounded-md transition-all ${activeTab === 'matches' ? 'bg-white shadow-sm text-indigo-600' : 'text-zinc-500 hover:text-zinc-700'}`}
+            onClick={openFullWindow}
+            className="p-1.5 rounded-lg bg-zinc-100 text-zinc-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+            title="Expandir a pestaña completa"
           >
-            <List className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => setActiveTab('settings')}
-            className={`p-1.5 rounded-md transition-all ${activeTab === 'settings' ? 'bg-white shadow-sm text-indigo-600' : 'text-zinc-500 hover:text-zinc-700'}`}
-          >
-            <Settings className="w-4 h-4" />
+            <Maximize2 className="w-4 h-4" />
           </button>
         </div>
       </header>
@@ -192,12 +235,39 @@ export default function App() {
               {/* Target Words Tags */}
               <div className="flex flex-wrap gap-2">
                 {state.targetWords.map(word => (
-                  <span key={word} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full border border-indigo-100">
-                    {word}
-                    <button onClick={() => removeWord(word)} className="hover:text-indigo-900">
-                      <Trash2 className="w-3 h-3" />
+                  <div 
+                    key={word.text} 
+                    className={`inline-flex items-center gap-2 px-2 py-1 rounded-xl border transition-all ${word.enabled ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-100 border-transparent opacity-60'}`}
+                  >
+                    <button 
+                      onClick={() => toggleWord(word.text)}
+                      className={`p-1 rounded-md transition-colors ${word.enabled ? 'text-indigo-600 hover:bg-indigo-50' : 'text-zinc-400 hover:bg-zinc-200'}`}
+                      title={word.enabled ? "Deshabilitar búsqueda" : "Habilitar búsqueda"}
+                    >
+                      {word.enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                     </button>
-                  </span>
+                    
+                    <span className={`text-xs font-semibold ${word.enabled ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                      {word.text}
+                    </span>
+
+                    <div className="flex items-center gap-1.5 ml-1">
+                      <input 
+                        type="color" 
+                        value={word.color}
+                        onChange={(e) => updateWordColor(word.text, e.target.value)}
+                        className="w-4 h-4 rounded-full border-0 p-0 overflow-hidden cursor-pointer bg-transparent"
+                        title="Cambiar color de resaltado"
+                      />
+                      <button 
+                        onClick={() => removeWord(word.text)} 
+                        className="p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
                 {state.targetWords.length === 0 && (
                   <p className="text-sm text-zinc-400 italic">No hay palabras configuradas.</p>
@@ -225,7 +295,14 @@ export default function App() {
                     Object.entries(groupedMatches).map(([word, wordMatches]: [string, Match[]]) => (
                       <div key={word} className="space-y-2">
                         <div className="flex items-center gap-2 px-1">
-                          <span className="text-xs font-bold text-indigo-600 px-1.5 py-0.5 bg-indigo-50 rounded border border-indigo-100">
+                          <span 
+                            className="text-xs font-bold px-1.5 py-0.5 rounded border"
+                            style={{ 
+                              backgroundColor: state.targetWords.find(w => w.text === word)?.color + '20' || '#eef2ff',
+                              color: state.targetWords.find(w => w.text === word)?.color || '#4f46e5',
+                              borderColor: state.targetWords.find(w => w.text === word)?.color + '40' || '#e0e7ff'
+                            }}
+                          >
                             {word}
                           </span>
                           <span className="text-[10px] font-medium text-zinc-400 uppercase">

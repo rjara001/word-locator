@@ -6,8 +6,14 @@ export interface Match {
   index: number;
 }
 
+export interface TargetWord {
+  text: string;
+  enabled: boolean;
+  color: string;
+}
+
 export interface AppState {
-  targetWords: string[];
+  targetWords: TargetWord[];
   isHighlightEnabled: boolean;
   highlightColor: string;
 }
