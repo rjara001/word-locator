@@ -2,6 +2,8 @@ import { AppState, Match } from './types';
 
 let matches: Match[] = [];
 let observer: MutationObserver | null = null;
+let isProcessing = false;
+let searchTimeout: number | null = null;
 
 async function getAppState(): Promise<AppState> {
   return new Promise((resolve) => {
@@ -15,6 +17,13 @@ function log(message: string, data?: any) {
   console.log(`[Word Locator] ${message}`, data || '');
 }
 
+function debounce(func: Function, wait: number) {
+  return (...args: any[]) => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = window.setTimeout(() => func(...args), wait);
+  };
+}
+
 function getAccentInsensitivePattern(text: string): string {
   const accentMap: { [key: string]: string } = {
     'a': '[aáàâäãå]',
@@ -25,80 +34,103 @@ function getAccentInsensitivePattern(text: string): string {
     'c': '[cç]',
     'n': '[nñ]'
   };
-  // Escapar caracteres especiales de regex primero
   const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').toLowerCase();
-  // Reemplazar espacios por \s+ para ignorar múltiples espacios
   const withFlexibleSpaces = escaped.replace(/\s+/g, '\\s+');
-  // Aplicar mapa de acentos
   return withFlexibleSpaces.split('').map(char => accentMap[char] || char).join('');
 }
 
 function findMatches(state: AppState) {
-  log('Iniciando búsqueda con palabras:', state.targetWords);
-  
-  if (state.targetWords.length === 0) {
-    log('No hay palabras para buscar.');
-    matches = [];
-    updateBadge(0);
-    return;
-  }
+  if (isProcessing) return;
+  isProcessing = true;
 
-  const newMatches: Match[] = [];
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+  // Desconectar observador temporalmente para evitar bucles infinitos por nuestras propias modificaciones
+  if (observer) observer.disconnect();
 
-  let node;
-  while ((node = walker.nextNode())) {
-    const text = node.textContent || '';
-    state.targetWords.forEach((word) => {
-      const trimmedWord = word.trim();
-      if (!trimmedWord) return;
-      
-      const pattern = getAccentInsensitivePattern(trimmedWord);
-      const regex = new RegExp(pattern, 'gi');
-      
-      let match;
-      while ((match = regex.exec(text)) !== null) {
+  try {
+    log('Iniciando búsqueda con palabras:', state.targetWords);
+    
+    if (state.targetWords.length === 0) {
+      log('No hay palabras para buscar.');
+      matches = [];
+      updateBadge(0);
+      return;
+    }
+
+    const newMatches: Match[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
         const parent = node.parentElement;
-        if (parent && parent.tagName !== 'SCRIPT' && parent.tagName !== 'STYLE' && !parent.classList.contains('word-locator-highlight')) {
-          newMatches.push({
-            id: `match-${newMatches.length}`,
-            text: word,
-            context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
-            selector: getUniqueSelector(parent),
-            index: match.index
-          });
+        if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.classList.contains('word-locator-highlight'))) {
+          return NodeFilter.FILTER_REJECT;
         }
+        return NodeFilter.FILTER_ACCEPT;
       }
     });
-  }
 
-  log(`Búsqueda finalizada. Encontradas ${newMatches.length} coincidencias.`);
-  matches = newMatches;
-  updateBadge(matches.length);
-  
-  if (state.isHighlightEnabled) {
-    applyHighlights(state);
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent || '';
+      state.targetWords.forEach((word) => {
+        const trimmedWord = word.trim();
+        if (!trimmedWord) return;
+        
+        const pattern = getAccentInsensitivePattern(trimmedWord);
+        const regex = new RegExp(pattern, 'gi');
+        
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const parent = node.parentElement;
+          if (parent) {
+            newMatches.push({
+              id: `match-${newMatches.length}`,
+              text: word,
+              context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
+              selector: getUniqueSelector(parent),
+              index: match.index
+            });
+          }
+        }
+      });
+    }
+
+    log(`Búsqueda finalizada. Encontradas ${newMatches.length} coincidencias.`);
+    matches = newMatches;
+    updateBadge(matches.length);
+    
+    if (state.isHighlightEnabled) {
+      applyHighlights(state);
+    }
+  } catch (error) {
+    console.error('[Word Locator] Error durante la búsqueda:', error);
+  } finally {
+    isProcessing = false;
+    // Reconectar observador
+    if (observer) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
   }
 }
 
 function getUniqueSelector(el: HTMLElement): string {
-  if (el.id) return `#${el.id}`;
+  if (el.id) return `#${CSS.escape(el.id)}`;
   const path = [];
-  while (el.nodeType === Node.ELEMENT_NODE) {
-    let selector = el.nodeName.toLowerCase();
-    if (el.id) {
-      selector += `#${el.id}`;
+  let current: HTMLElement | null = el;
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let selector = current.nodeName.toLowerCase();
+    if (current.id) {
+      selector += `#${CSS.escape(current.id)}`;
       path.unshift(selector);
       break;
     } else {
-      let sib = el, nth = 1;
-      while (sib = sib.previousElementSibling as HTMLElement) {
+      let sib: Element | null = current;
+      let nth = 1;
+      while (sib = sib.previousElementSibling) {
         if (sib.nodeName.toLowerCase() == selector) nth++;
       }
       if (nth != 1) selector += `:nth-of-type(${nth})`;
     }
     path.unshift(selector);
-    el = el.parentNode as HTMLElement;
+    current = current.parentElement;
   }
   return path.join(' > ');
 }
@@ -106,7 +138,6 @@ function getUniqueSelector(el: HTMLElement): string {
 function applyHighlights(state: AppState) {
   log('Aplicando resaltado...');
   
-  // Limpiar resaltados anteriores de forma más segura
   const existingHighlights = document.querySelectorAll('.word-locator-highlight');
   existingHighlights.forEach(el => {
     const parent = el.parentNode;
@@ -118,7 +149,6 @@ function applyHighlights(state: AppState) {
 
   if (!state.isHighlightEnabled || state.targetWords.length === 0) return;
 
-  // Usar un TreeWalker para encontrar nodos de texto que NO estén ya en un resaltado
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
     acceptNode: (node) => {
       const parent = node.parentElement;
@@ -166,16 +196,24 @@ function updateBadge(count: number) {
   chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count });
 }
 
+const debouncedFindMatches = debounce((state: AppState) => {
+  findMatches(state);
+}, 1000); // Esperar 1 segundo de inactividad antes de buscar
+
 // Escuchar mensajes del popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_MATCHES') {
     sendResponse({ matches });
   } else if (message.type === 'SCROLL_TO') {
-    const el = document.querySelector(message.selector) as HTMLElement;
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.style.outline = '3px solid #EF4444';
-      setTimeout(() => el.style.outline = '', 2000);
+    try {
+      const el = document.querySelector(message.selector) as HTMLElement;
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.outline = '3px solid #EF4444';
+        setTimeout(() => el.style.outline = '', 2000);
+      }
+    } catch (e) {
+      console.error('[Word Locator] Error al hacer scroll:', e);
     }
   } else if (message.type === 'STATE_CHANGED') {
     getAppState().then(findMatches);
@@ -186,10 +224,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 getAppState().then(state => {
   findMatches(state);
   
-  // Observar cambios en el DOM para sitios dinámicos
   if (observer) observer.disconnect();
   observer = new MutationObserver(() => {
-    findMatches(state);
+    debouncedFindMatches(state);
   });
   observer.observe(document.body, { childList: true, subtree: true });
 });
