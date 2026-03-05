@@ -12,12 +12,17 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchMatches = () => {
+    console.error('[Word Locator] fetchMatches llamado');
     if (typeof chrome !== 'undefined' && chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
+          console.error('[Word Locator] Pidiendo matches a tab:', tabs[0].id);
           chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_MATCHES' }, (response) => {
             if (response?.matches) {
+              console.error('[Word Locator] Recibidos matches de content script:', response.matches.length);
               setMatches(response.matches);
+            } else {
+              console.error('[Word Locator] No se recibieron matches o respuesta vacía');
             }
           });
         }
@@ -26,10 +31,12 @@ export default function App() {
   };
 
   const refreshSearch = () => {
+    console.error('[Word Locator] Botón Refresh presionado');
     setIsRefreshing(true);
     if (typeof chrome !== 'undefined' && chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
+          console.error('[Word Locator] Enviando STATE_CHANGED desde refreshSearch a tab:', tabs[0].id);
           chrome.tabs.sendMessage(tabs[0].id, { type: 'STATE_CHANGED' });
           // Esperar un poco a que termine la búsqueda antes de pedir los resultados
           setTimeout(() => {
@@ -37,6 +44,7 @@ export default function App() {
             setIsRefreshing(false);
           }, 1500);
         } else {
+          console.error('[Word Locator] No se encontró tab activa para refresh');
           setIsRefreshing(false);
         }
       });
@@ -46,6 +54,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    console.error('[Word Locator] App montada');
     // Cargar estado desde storage
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get(['appState'], (result) => {
@@ -88,14 +97,16 @@ export default function App() {
   }, []);
 
   const saveState = (newState: AppState) => {
-    console.log('[Word Locator] Guardando nuevo estado:', newState);
+    console.error('[Word Locator] Guardando nuevo estado:', newState);
     setState(newState);
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.set({ appState: newState }, () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
           if (tabs[0]?.id) {
-            console.log('[Word Locator] Enviando mensaje STATE_CHANGED a la pestaña:', tabs[0].id);
+            console.error('[Word Locator] Enviando mensaje STATE_CHANGED a la pestaña:', tabs[0].id);
             chrome.tabs.sendMessage(tabs[0].id, { type: 'STATE_CHANGED' });
+          } else {
+            console.error('[Word Locator] No se encontró tab activa para enviar STATE_CHANGED');
           }
         });
       });
@@ -140,7 +151,7 @@ export default function App() {
 
   const scrollToMatch = (selector: string) => {
     if (typeof chrome !== 'undefined' && chrome.tabs) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
           chrome.tabs.sendMessage(tabs[0].id, { type: 'SCROLL_TO', selector });
         }

@@ -1,5 +1,7 @@
 import { AppState, Match } from './types';
 
+console.error('[Word Locator] Content script cargado y ejecutándose');
+
 let matches: Match[] = [];
 let observer: MutationObserver | null = null;
 let isProcessing = false;
@@ -66,6 +68,7 @@ function findMatches(state: AppState) {
 
   try {
     log('Iniciando búsqueda con palabras:', state.targetWords);
+    log('Estado de resaltado:', state.isHighlightEnabled);
     
     if (state.targetWords.length === 0) {
       log('No hay palabras para buscar.');
@@ -281,21 +284,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.error('[Word Locator] Error al hacer scroll:', e);
     }
   } else if (message.type === 'STATE_CHANGED') {
+    console.error('[Word Locator] Mensaje STATE_CHANGED recibido en content script');
     getAppState().then(state => {
       currentAppState = state;
+      console.error('[Word Locator] Estado actualizado en content script, iniciando búsqueda...', state);
       findMatches(state);
     });
   }
 });
 
 // Inicializar
-getAppState().then(state => {
-  currentAppState = state;
-  findMatches(state);
-  
-  if (observer) observer.disconnect();
-  observer = new MutationObserver(() => {
-    debouncedFindMatches();
+try {
+  getAppState().then(state => {
+    currentAppState = state;
+    log('Inicializando con estado:', state);
+    findMatches(state);
+    
+    if (observer) observer.disconnect();
+    observer = new MutationObserver(() => {
+      debouncedFindMatches();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }).catch(err => {
+    console.error('[Word Locator] Error en la inicialización (getAppState):', err);
   });
-  observer.observe(document.body, { childList: true, subtree: true });
-});
+} catch (e) {
+  console.error('[Word Locator] Error crítico en la inicialización:', e);
+}
