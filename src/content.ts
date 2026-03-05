@@ -193,7 +193,7 @@ function applyHighlights(state: AppState) {
 }
 
 function updateBadge(count: number) {
-  chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count });
+  chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count, matches });
 }
 
 const debouncedFindMatches = debounce((state: AppState) => {

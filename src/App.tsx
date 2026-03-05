@@ -11,6 +11,20 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const fetchMatches = () => {
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_MATCHES' }, (response) => {
+              if (response?.matches) {
+                setMatches(response.matches);
+              }
+            });
+          }
+        });
+      }
+    };
+
     // Cargar estado desde storage
     if (typeof chrome !== 'undefined' && chrome.storage) {
       chrome.storage.local.get(['appState'], (result) => {
@@ -20,16 +34,18 @@ export default function App() {
         setIsLoading(false);
       });
 
-      // Obtener matches de la pestaña activa
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_MATCHES' }, (response) => {
-            if (response?.matches) {
-              setMatches(response.matches);
-            }
-          });
+      // Obtener matches iniciales
+      fetchMatches();
+
+      // Escuchar actualizaciones en tiempo real desde el content script
+      const messageListener = (message: any) => {
+        if (message.type === 'UPDATE_COUNT' && message.matches) {
+          console.log('[Word Locator] Recibidos matches actualizados:', message.matches.length);
+          setMatches(message.matches);
         }
-      });
+      };
+      chrome.runtime.onMessage.addListener(messageListener);
+      return () => chrome.runtime.onMessage.removeListener(messageListener);
     } else {
       // Mock para desarrollo local
       setIsLoading(false);
