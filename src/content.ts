@@ -142,19 +142,44 @@ function findMatches(state: AppState) {
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
         if (parent) {
-          // Intentar obtener un contexto más amplio del padre si el nodo actual es corto
+          // Intentar obtener un contexto más amplio subiendo en el árbol DOM
           let contextText = text;
           let matchIndex = match.index;
           
-          // Si el texto del nodo es corto, intentamos usar el texto del padre para dar más contexto
-          // (útil cuando la palabra está dentro de etiquetas como <b>, <i>, <span>, etc.)
-          if (text.length < 150 && parent.textContent && parent.textContent.length > text.length) {
-            const fullParentText = parent.textContent;
-            const nodeIndexInParent = fullParentText.indexOf(text);
-            if (nodeIndexInParent !== -1) {
-              contextText = fullParentText;
-              matchIndex = nodeIndexInParent + match.index;
+          // Subimos por los padres para encontrar un contexto que tenga sentido (mínimo 150 caracteres o bloque)
+          let currentContextEl: HTMLElement | null = parent;
+          const MIN_CONTEXT_LENGTH = 160;
+          
+          while (currentContextEl && currentContextEl.tagName !== 'BODY' && contextText.length < MIN_CONTEXT_LENGTH) {
+            const parentEl = currentContextEl.parentElement;
+            if (!parentEl) break;
+            
+            // Calculamos el offset real del elemento actual dentro del texto del padre
+            // Esto es mucho más preciso que indexOf, que puede fallar con palabras repetidas
+            let offset = 0;
+            let found = false;
+            for (const child of parentEl.childNodes) {
+              if (child === currentContextEl) {
+                found = true;
+                break;
+              }
+              offset += (child.textContent || '').length;
             }
+            
+            if (found) {
+              matchIndex = offset + matchIndex;
+              contextText = parentEl.textContent || '';
+            } else {
+              break;
+            }
+
+            // Si llegamos a un elemento de bloque, solemos tener el contexto de la "línea" o "párrafo"
+            const style = window.getComputedStyle(currentContextEl);
+            if (style.display === 'block' || style.display === 'flex' || style.display === 'grid' || style.display === 'table-row') {
+              break;
+            }
+            
+            currentContextEl = parentEl;
           }
 
           newMatches.push({
