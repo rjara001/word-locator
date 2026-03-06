@@ -1,6 +1,10 @@
 import { AppState, Match } from './types';
 
-console.error('[Word Locator] Content script cargado y ejecutándose');
+function log(message: string, data?: any) {
+  console.error(`[Word Locator] ${message}`, data || '');
+}
+
+log('Content script cargado y ejecutándose');
 
 let matches: Match[] = [];
 let observer: MutationObserver | null = null;
@@ -23,10 +27,6 @@ async function getAppState(): Promise<AppState> {
       resolve(state);
     });
   });
-}
-
-function log(message: string, data?: any) {
-  console.log(`[Word Locator] ${message}`, data || '');
 }
 
 function debounce(func: Function, wait: number) {
@@ -60,6 +60,7 @@ function getAccentInsensitivePattern(text: string): string {
 }
 
 function clearHighlights() {
+  log('clearHighlights() ejecutándose...');
   // 1. Limpiar resaltados anteriores de forma exhaustiva
   const existingContainers = document.querySelectorAll('.word-locator-container');
   existingContainers.forEach(container => {
@@ -84,7 +85,11 @@ function clearHighlights() {
 }
 
 function findMatches(state: AppState) {
-  if (isProcessing) return;
+  log('findMatches() llamada con estado:', state);
+  if (isProcessing) {
+    log('findMatches() abortada: ya se está procesando.');
+    return;
+  }
   isProcessing = true;
 
   // Desconectar observador temporalmente
@@ -119,9 +124,11 @@ function findMatches(state: AppState) {
     });
 
     let node;
+    let nodesProcessed = 0;
     while ((node = walker.nextNode())) {
+      nodesProcessed++;
       const text = node.textContent || '';
-    state.targetWords.forEach((word) => {
+      state.targetWords.forEach((word) => {
       let textToSearch = '';
       let isEnabled = true;
 
@@ -213,6 +220,7 @@ function findMatches(state: AppState) {
     });
     }
 
+    log(`Procesados ${nodesProcessed} nodos de texto.`);
     log(`Búsqueda finalizada. Encontradas ${newMatches.length} coincidencias.`);
     matches = newMatches;
     updateBadge(matches.length);
@@ -257,8 +265,7 @@ function getUniqueSelector(el: HTMLElement): string {
 }
 
 function applyHighlights(state: AppState) {
-  log('Aplicando resaltado...');
-  
+  log('applyHighlights() ejecutándose...');
   // La limpieza ya se hizo en findMatches o se hace aquí si se llama directamente
   clearHighlights();
 
@@ -338,6 +345,7 @@ function updateBadge(count: number) {
 }
 
 const debouncedFindMatches = debounce(() => {
+  log('debouncedFindMatches() ejecutándose...');
   if (currentAppState && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
     findMatches(currentAppState);
   }
@@ -346,6 +354,7 @@ const debouncedFindMatches = debounce(() => {
 // Escuchar mensajes del popup
 if (typeof chrome !== 'undefined' && chrome.runtime) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    log('Mensaje recibido en content script:', message.type);
     if (message.type === 'GET_MATCHES') {
       sendResponse({ matches });
     } else if (message.type === 'SCROLL_TO') {
@@ -359,14 +368,14 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
     } catch (e) {
       console.error('[Word Locator] Error al hacer scroll:', e);
     }
-  } else if (message.type === 'STATE_CHANGED') {
-    console.error('[Word Locator] Mensaje STATE_CHANGED recibido en content script');
-    getAppState().then(state => {
-      currentAppState = state;
-      console.error('[Word Locator] Estado actualizado en content script, iniciando búsqueda...', state);
-      findMatches(state);
-    });
-  }
+    } else if (message.type === 'STATE_CHANGED') {
+      log('STATE_CHANGED recibido, actualizando estado...');
+      getAppState().then(state => {
+        currentAppState = state;
+        log('Estado actualizado en content script, iniciando búsqueda...', state);
+        findMatches(state);
+      });
+    }
 });
 }
 
@@ -379,12 +388,13 @@ try {
     
     if (observer) observer.disconnect();
     observer = new MutationObserver(() => {
+      log('MutationObserver detectó cambios en el DOM.');
       debouncedFindMatches();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }).catch(err => {
-    console.error('[Word Locator] Error en la inicialización (getAppState):', err);
+    log('Error en la inicialización (getAppState):', err);
   });
 } catch (e) {
-  console.error('[Word Locator] Error crítico en la inicialización:', e);
+  log('Error crítico en la inicialización:', e);
 }
