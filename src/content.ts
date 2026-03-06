@@ -117,7 +117,7 @@ function findMatches(state: AppState) {
           newMatches.push({
             id: `match-${newMatches.length}`,
             text: textToSearch,
-            context: text.substring(Math.max(0, match.index - 30), Math.min(text.length, match.index + match[0].length + 30)),
+            context: text.substring(Math.max(0, match.index - 100), Math.min(text.length, match.index + match[0].length + 100)),
             selector: getUniqueSelector(parent),
             index: match.index
           });

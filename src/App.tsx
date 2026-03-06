@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Settings, List, Plus, Trash2, ChevronRight, Highlighter, Info, RefreshCcw, Maximize2, Eye, EyeOff } from 'lucide-react';
+import { Search, Settings, List, Plus, Trash2, ChevronRight, ChevronDown, Highlighter, Info, RefreshCcw, Maximize2, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AppState, Match, DEFAULT_STATE } from './types';
 
@@ -11,6 +11,14 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (word: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [word]: !prev[word]
+    }));
+  };
 
   const fetchMatches = () => {
     console.error('[Word Locator] fetchMatches llamado');
@@ -323,45 +331,63 @@ export default function App() {
                   {Object.keys(groupedMatches).length > 0 ? (
                     Object.entries(groupedMatches).map(([word, wordMatches]: [string, Match[]]) => (
                       <div key={word} className="space-y-2">
-                        <div className="flex items-center gap-2 px-1">
-                          <span 
-                            className="text-xs font-bold px-1.5 py-0.5 rounded border"
-                            style={{ 
-                              backgroundColor: state.targetWords.find(w => w.text === word)?.color + '20' || '#eef2ff',
-                              color: state.targetWords.find(w => w.text === word)?.color || '#4f46e5',
-                              borderColor: state.targetWords.find(w => w.text === word)?.color + '40' || '#e0e7ff'
-                            }}
-                          >
-                            {word}
-                          </span>
-                          <span className="text-[10px] font-medium text-zinc-400 uppercase">
-                            {wordMatches.length} {wordMatches.length === 1 ? 'coincidencia' : 'coincidencias'}
-                          </span>
-                        </div>
-                        <div className="space-y-1.5 pl-2 border-l-2 border-zinc-100 ml-1">
-                          {wordMatches.map((match) => (
-                            <button
-                              key={match.id}
-                              onClick={() => scrollToMatch(match.id, match.selector)}
-                              className={`w-full text-left p-2.5 border rounded-xl transition-all group ${
-                                selectedMatchId === match.id 
-                                  ? 'bg-indigo-50 border-indigo-300 shadow-sm' 
-                                  : 'bg-white border-zinc-200 hover:border-indigo-300 hover:shadow-sm'
-                              }`}
+                        <button 
+                          onClick={() => toggleGroup(word)}
+                          className="w-full flex items-center justify-between px-1 py-1 hover:bg-zinc-100 rounded-lg transition-colors group"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span 
+                              className="text-xs font-bold px-1.5 py-0.5 rounded border"
+                              style={{ 
+                                backgroundColor: state.targetWords.find(w => w.text === word)?.color + '20' || '#eef2ff',
+                                color: state.targetWords.find(w => w.text === word)?.color || '#4f46e5',
+                                borderColor: state.targetWords.find(w => w.text === word)?.color + '40' || '#e0e7ff'
+                              }}
                             >
-                              <div className="flex items-center justify-between">
-                                <p className={`text-xs line-clamp-2 italic flex-1 ${
-                                  selectedMatchId === match.id ? 'text-indigo-900 font-medium' : 'text-zinc-600'
-                                }`}>
-                                  "...{match.context}..."
-                                </p>
-                                <ChevronRight className={`w-3.5 h-3.5 transition-colors shrink-0 ml-2 ${
-                                  selectedMatchId === match.id ? 'text-indigo-500' : 'text-zinc-300 group-hover:text-indigo-500'
-                                }`} />
+                              {word}
+                            </span>
+                            <span className="text-[10px] font-medium text-zinc-400 uppercase">
+                              {wordMatches.length} {wordMatches.length === 1 ? 'coincidencia' : 'coincidencias'}
+                            </span>
+                          </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${expandedGroups[word] ? 'rotate-180' : ''}`} />
+                        </button>
+                        
+                        <AnimatePresence>
+                          {expandedGroups[word] && (
+                            <motion.div 
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="space-y-1.5 pl-2 border-l-2 border-zinc-100 ml-1 pb-1">
+                                {wordMatches.map((match) => (
+                                  <button
+                                    key={match.id}
+                                    onClick={() => scrollToMatch(match.id, match.selector)}
+                                    className={`w-full text-left p-2.5 border rounded-xl transition-all group ${
+                                      selectedMatchId === match.id 
+                                        ? 'bg-indigo-50 border-indigo-300 shadow-sm' 
+                                        : 'bg-white border-zinc-200 hover:border-indigo-300 hover:shadow-sm'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <p className={`text-xs line-clamp-2 italic flex-1 ${
+                                        selectedMatchId === match.id ? 'text-indigo-900 font-medium' : 'text-zinc-600'
+                                      }`}>
+                                        "...{match.context}..."
+                                      </p>
+                                      <ChevronRight className={`w-3.5 h-3.5 transition-colors shrink-0 ml-2 ${
+                                        selectedMatchId === match.id ? 'text-indigo-500' : 'text-zinc-300 group-hover:text-indigo-500'
+                                      }`} />
+                                    </div>
+                                  </button>
+                                ))}
                               </div>
-                            </button>
-                          ))}
-                        </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     ))
                   ) : (
