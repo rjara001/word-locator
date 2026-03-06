@@ -10,6 +10,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'matches' | 'settings'>('matches');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   const fetchMatches = () => {
     console.error('[Word Locator] fetchMatches llamado');
@@ -149,7 +150,8 @@ export default function App() {
     saveState(newState);
   };
 
-  const scrollToMatch = (selector: string) => {
+  const scrollToMatch = (matchId: string, selector: string) => {
+    setSelectedMatchId(matchId);
     if (typeof chrome !== 'undefined' && chrome.tabs) {
       chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
@@ -340,14 +342,22 @@ export default function App() {
                           {wordMatches.map((match) => (
                             <button
                               key={match.id}
-                              onClick={() => scrollToMatch(match.selector)}
-                              className="w-full text-left p-2.5 bg-white border border-zinc-200 rounded-xl hover:border-indigo-300 hover:shadow-sm transition-all group"
+                              onClick={() => scrollToMatch(match.id, match.selector)}
+                              className={`w-full text-left p-2.5 border rounded-xl transition-all group ${
+                                selectedMatchId === match.id 
+                                  ? 'bg-indigo-50 border-indigo-300 shadow-sm' 
+                                  : 'bg-white border-zinc-200 hover:border-indigo-300 hover:shadow-sm'
+                              }`}
                             >
                               <div className="flex items-center justify-between">
-                                <p className="text-xs text-zinc-600 line-clamp-2 italic flex-1">
+                                <p className={`text-xs line-clamp-2 italic flex-1 ${
+                                  selectedMatchId === match.id ? 'text-indigo-900 font-medium' : 'text-zinc-600'
+                                }`}>
                                   "...{match.context}..."
                                 </p>
-                                <ChevronRight className="w-3.5 h-3.5 text-zinc-300 group-hover:text-indigo-500 transition-colors shrink-0 ml-2" />
+                                <ChevronRight className={`w-3.5 h-3.5 transition-colors shrink-0 ml-2 ${
+                                  selectedMatchId === match.id ? 'text-indigo-500' : 'text-zinc-300 group-hover:text-indigo-500'
+                                }`} />
                               </div>
                             </button>
                           ))}
