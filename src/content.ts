@@ -142,20 +142,23 @@ function findMatches(state: AppState) {
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
         if (parent) {
-          // Intentar obtener un contexto más amplio subiendo en el árbol DOM
-          let contextText = text;
-          let matchIndex = match.index;
+          // 1. Calcular la posición inicial de la coincidencia relativa al PADRE inmediato
+          let matchIndexInContext = 0;
+          for (const child of parent.childNodes) {
+            if (child === node) break;
+            matchIndexInContext += (child.textContent || '').length;
+          }
+          matchIndexInContext += match.index;
           
-          // Subimos por los padres para encontrar un contexto que tenga sentido (mínimo 150 caracteres o bloque)
+          let contextText = parent.textContent || '';
           let currentContextEl: HTMLElement | null = parent;
           const MIN_CONTEXT_LENGTH = 160;
           
+          // 2. Subir por el árbol DOM para ampliar el contexto si es necesario
           while (currentContextEl && currentContextEl.tagName !== 'BODY' && contextText.length < MIN_CONTEXT_LENGTH) {
             const parentEl = currentContextEl.parentElement;
             if (!parentEl) break;
             
-            // Calculamos el offset real del elemento actual dentro del texto del padre
-            // Esto es mucho más preciso que indexOf, que puede fallar con palabras repetidas
             let offset = 0;
             let found = false;
             for (const child of parentEl.childNodes) {
@@ -167,13 +170,12 @@ function findMatches(state: AppState) {
             }
             
             if (found) {
-              matchIndex = offset + matchIndex;
+              matchIndexInContext = offset + matchIndexInContext;
               contextText = parentEl.textContent || '';
             } else {
               break;
             }
 
-            // Si llegamos a un elemento de bloque, solemos tener el contexto de la "línea" o "párrafo"
             const style = window.getComputedStyle(currentContextEl);
             if (style.display === 'block' || style.display === 'flex' || style.display === 'grid' || style.display === 'table-row') {
               break;
@@ -186,8 +188,8 @@ function findMatches(state: AppState) {
             id: `match-${newMatches.length}`,
             text: textToSearch,
             context: contextText.substring(
-              Math.max(0, matchIndex - 100), 
-              Math.min(contextText.length, matchIndex + match[0].length + 100)
+              Math.max(0, matchIndexInContext - 100), 
+              Math.min(contextText.length, matchIndexInContext + match[0].length + 100)
             ).trim().replace(/\s+/g, ' '),
             selector: getUniqueSelector(parent),
             index: match.index
