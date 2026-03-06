@@ -105,6 +105,7 @@ function findMatches(state: AppState) {
       return;
     }
 
+    log('Extrayendo texto de la página...');
     const newMatches: Match[] = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) => {
@@ -142,7 +143,7 @@ function findMatches(state: AppState) {
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
         if (parent) {
-          log(`Coincidencia encontrada para "${trimmedWord}" en nodo:`, text);
+          log(`[Extrayendo Texto] Coincidencia para "${trimmedWord}" en: "${text.trim()}"`);
           
           // 1. Calcular la posición inicial de la coincidencia relativa al PADRE inmediato
           let matchIndexInContext = 0;
@@ -198,7 +199,7 @@ function findMatches(state: AppState) {
             Math.min(contextText.length, matchIndexInContext + match[0].length + 100)
           ).trim().replace(/\s+/g, ' ');
 
-          log(`Contexto final extraído: "${finalContext}"`);
+          log(`[Extrayendo Texto] Contexto final: "${finalContext}"`);
 
           newMatches.push({
             id: `match-${newMatches.length}`,
