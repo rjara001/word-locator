@@ -189,7 +189,10 @@ export default function App() {
             <Search className="w-5 h-5 text-white" />
           </div>
           <div className="flex flex-col">
-            <h1 className="font-bold text-lg leading-tight tracking-tight">Word Locator</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-lg leading-tight tracking-tight">Word Locator</h1>
+              <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-bold rounded uppercase tracking-wider">VPM</span>
+            </div>
             <span className="text-[10px] text-zinc-400 font-medium -mt-0.5">v1.0.8</span>
           </div>
         </div>
@@ -268,6 +271,11 @@ export default function App() {
                     
                     <span className={`text-xs font-semibold ${word.enabled ? 'text-zinc-700' : 'text-zinc-400'}`}>
                       {word.text}
+                      {word.enabled && (groupedMatches[word.text]?.length || 0) > 0 && (
+                        <span className="ml-1.5 px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-md text-[10px] font-bold border border-indigo-100">
+                          {groupedMatches[word.text]?.length}
+                        </span>
+                      )}
                     </span>
 
                     <div className="flex items-center gap-1.5 ml-1">
