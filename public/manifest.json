@@ -17,5 +17,11 @@
       "js": ["src/content.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content.js", "src/background.js", "index.html"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

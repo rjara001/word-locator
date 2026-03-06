@@ -259,20 +259,28 @@ function applyHighlights(state: AppState) {
 }
 
 function updateBadge(count: number) {
-  chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count, matches });
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
+    try {
+      // No enviamos 'matches' al background porque no se usan allí y saturan el canal
+      chrome.runtime.sendMessage({ type: 'UPDATE_COUNT', count });
+    } catch (e) {
+      // El contexto de la extensión podría haber sido invalidado (ej. recarga)
+    }
+  }
 }
 
 const debouncedFindMatches = debounce(() => {
-  if (currentAppState) {
+  if (currentAppState && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
     findMatches(currentAppState);
   }
-}, 1000);
+}, 1500); // Aumentamos un poco el debounce para ser más gentiles con el navegador
 
 // Escuchar mensajes del popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'GET_MATCHES') {
-    sendResponse({ matches });
-  } else if (message.type === 'SCROLL_TO') {
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'GET_MATCHES') {
+      sendResponse({ matches });
+    } else if (message.type === 'SCROLL_TO') {
     try {
       const el = document.querySelector(message.selector) as HTMLElement;
       if (el) {
@@ -292,6 +300,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
   }
 });
+}
 
 // Inicializar
 try {
