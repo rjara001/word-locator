@@ -1,7 +1,8 @@
 import { AppState, Match } from './types';
 
 function log(message: string, data?: any) {
-  console.error(`[Word Locator] ${message}`, data || '');
+  const now = new Date().toLocaleTimeString();
+  console.error(`[Word Locator v1.1.1] [${now}] ${message}`, data || '');
 }
 
 log('Content script cargado y ejecutándose');
