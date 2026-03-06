@@ -142,6 +142,8 @@ function findMatches(state: AppState) {
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
         if (parent) {
+          log(`Coincidencia encontrada para "${trimmedWord}" en nodo:`, text);
+          
           // 1. Calcular la posición inicial de la coincidencia relativa al PADRE inmediato
           let matchIndexInContext = 0;
           for (const child of parent.childNodes) {
@@ -154,8 +156,12 @@ function findMatches(state: AppState) {
           let currentContextEl: HTMLElement | null = parent;
           const MIN_CONTEXT_LENGTH = 160;
           
+          log(`Contexto inicial (padre): "${contextText}"`);
+          log(`Index inicial en contexto: ${matchIndexInContext}`);
+          
           // 2. Subir por el árbol DOM para ampliar el contexto si es necesario
-          while (currentContextEl && currentContextEl.tagName !== 'BODY' && contextText.length < MIN_CONTEXT_LENGTH) {
+          let depth = 0;
+          while (currentContextEl && currentContextEl.tagName !== 'BODY' && contextText.length < MIN_CONTEXT_LENGTH && depth < 5) {
             const parentEl = currentContextEl.parentElement;
             if (!parentEl) break;
             
@@ -172,25 +178,32 @@ function findMatches(state: AppState) {
             if (found) {
               matchIndexInContext = offset + matchIndexInContext;
               contextText = parentEl.textContent || '';
+              log(`Subiendo nivel ${depth + 1} (${parentEl.tagName}). Nuevo contexto: "${contextText.substring(0, 50)}..."`);
             } else {
               break;
             }
 
             const style = window.getComputedStyle(currentContextEl);
             if (style.display === 'block' || style.display === 'flex' || style.display === 'grid' || style.display === 'table-row') {
+              log(`Deteniendo subida en elemento de bloque: ${currentContextEl.tagName}`);
               break;
             }
             
             currentContextEl = parentEl;
+            depth++;
           }
+
+          const finalContext = contextText.substring(
+            Math.max(0, matchIndexInContext - 100), 
+            Math.min(contextText.length, matchIndexInContext + match[0].length + 100)
+          ).trim().replace(/\s+/g, ' ');
+
+          log(`Contexto final extraído: "${finalContext}"`);
 
           newMatches.push({
             id: `match-${newMatches.length}`,
             text: textToSearch,
-            context: contextText.substring(
-              Math.max(0, matchIndexInContext - 100), 
-              Math.min(contextText.length, matchIndexInContext + match[0].length + 100)
-            ).trim().replace(/\s+/g, ' '),
+            context: finalContext,
             selector: getUniqueSelector(parent),
             index: match.index
           });
