@@ -1,11 +1,10 @@
 import { AppState, Match } from './types';
 
 function log(message: string, data?: any) {
-  const now = new Date().toLocaleTimeString();
-  console.error(`[Word Locator v1.1.1] [${now}] ${message}`, data || '');
+  console.log(`[Word Locator] ${message}`, data || '');
 }
 
-log('Content script cargado y ejecutándose');
+log('Content script cargado');
 
 let matches: Match[] = [];
 let observer: MutationObserver | null = null;
@@ -61,7 +60,6 @@ function getAccentInsensitivePattern(text: string): string {
 }
 
 function clearHighlights() {
-  log('clearHighlights() ejecutándose...');
   // 1. Limpiar resaltados anteriores de forma exhaustiva
   const existingContainers = document.querySelectorAll('.word-locator-container');
   existingContainers.forEach(container => {
@@ -86,11 +84,7 @@ function clearHighlights() {
 }
 
 function findMatches(state: AppState) {
-  log('findMatches() llamada con estado:', state);
-  if (isProcessing) {
-    log('findMatches() abortada: ya se está procesando.');
-    return;
-  }
+  if (isProcessing) return;
   isProcessing = true;
 
   // Desconectar observador temporalmente
@@ -105,13 +99,11 @@ function findMatches(state: AppState) {
     log('Estado de resaltado:', state.isHighlightEnabled);
     
     if (state.targetWords.length === 0) {
-      log('No hay palabras para buscar.');
       matches = [];
       updateBadge(0);
       return;
     }
 
-    log('Extrayendo texto de la página...');
     const newMatches: Match[] = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) => {
@@ -125,9 +117,7 @@ function findMatches(state: AppState) {
     });
 
     let node;
-    let nodesProcessed = 0;
     while ((node = walker.nextNode())) {
-      nodesProcessed++;
       const text = node.textContent || '';
       state.targetWords.forEach((word) => {
       let textToSearch = '';
@@ -151,8 +141,6 @@ function findMatches(state: AppState) {
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
         if (parent) {
-          log(`[Extrayendo Texto] Coincidencia para "${trimmedWord}" en: "${text.trim()}"`);
-          
           // 1. Calcular la posición inicial de la coincidencia relativa al PADRE inmediato
           let matchIndexInContext = 0;
           for (const child of parent.childNodes) {
@@ -164,9 +152,6 @@ function findMatches(state: AppState) {
           let contextText = parent.textContent || '';
           let currentContextEl: HTMLElement | null = parent;
           const MIN_CONTEXT_LENGTH = 160;
-          
-          log(`Contexto inicial (padre): "${contextText}"`);
-          log(`Index inicial en contexto: ${matchIndexInContext}`);
           
           // 2. Subir por el árbol DOM para ampliar el contexto si es necesario
           let depth = 0;
@@ -187,14 +172,12 @@ function findMatches(state: AppState) {
             if (found) {
               matchIndexInContext = offset + matchIndexInContext;
               contextText = parentEl.textContent || '';
-              log(`Subiendo nivel ${depth + 1} (${parentEl.tagName}). Nuevo contexto: "${contextText.substring(0, 50)}..."`);
             } else {
               break;
             }
 
             const style = window.getComputedStyle(currentContextEl);
             if (style.display === 'block' || style.display === 'flex' || style.display === 'grid' || style.display === 'table-row') {
-              log(`Deteniendo subida en elemento de bloque: ${currentContextEl.tagName}`);
               break;
             }
             
@@ -221,8 +204,6 @@ function findMatches(state: AppState) {
     });
     }
 
-    log(`Procesados ${nodesProcessed} nodos de texto.`);
-    log(`Búsqueda finalizada. Encontradas ${newMatches.length} coincidencias.`);
     matches = newMatches;
     updateBadge(matches.length);
     
@@ -266,7 +247,6 @@ function getUniqueSelector(el: HTMLElement): string {
 }
 
 function applyHighlights(state: AppState) {
-  log('applyHighlights() ejecutándose...');
   // La limpieza ya se hizo en findMatches o se hace aquí si se llama directamente
   clearHighlights();
 
@@ -331,7 +311,6 @@ function applyHighlights(state: AppState) {
       textNode.parentNode?.replaceChild(span, textNode);
     }
   });
-  log('Resaltado completado.');
 }
 
 function updateBadge(count: number) {
@@ -346,7 +325,6 @@ function updateBadge(count: number) {
 }
 
 const debouncedFindMatches = debounce(() => {
-  log('debouncedFindMatches() ejecutándose...');
   if (currentAppState && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
     findMatches(currentAppState);
   }
@@ -355,7 +333,6 @@ const debouncedFindMatches = debounce(() => {
 // Escuchar mensajes del popup
 if (typeof chrome !== 'undefined' && chrome.runtime) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    log('Mensaje recibido en content script:', message.type);
     if (message.type === 'GET_MATCHES') {
       sendResponse({ matches });
     } else if (message.type === 'SCROLL_TO') {
@@ -370,10 +347,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
       console.error('[Word Locator] Error al hacer scroll:', e);
     }
     } else if (message.type === 'STATE_CHANGED') {
-      log('STATE_CHANGED recibido, actualizando estado...');
       getAppState().then(state => {
         currentAppState = state;
-        log('Estado actualizado en content script, iniciando búsqueda...', state);
         findMatches(state);
       });
     }
@@ -384,18 +359,14 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 try {
   getAppState().then(state => {
     currentAppState = state;
-    log('Inicializando con estado:', state);
     findMatches(state);
     
     if (observer) observer.disconnect();
     observer = new MutationObserver(() => {
-      log('MutationObserver detectó cambios en el DOM.');
       debouncedFindMatches();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }).catch(err => {
-    log('Error en la inicialización (getAppState):', err);
   });
 } catch (e) {
-  log('Error crítico en la inicialización:', e);
 }
