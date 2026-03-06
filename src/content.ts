@@ -59,14 +59,42 @@ function getAccentInsensitivePattern(text: string): string {
     .replace(/(\\s\+)+/g, '\\s+');
 }
 
+function clearHighlights() {
+  // 1. Limpiar resaltados anteriores de forma exhaustiva
+  const existingContainers = document.querySelectorAll('.word-locator-container');
+  existingContainers.forEach(container => {
+    const parent = container.parentNode;
+    if (parent) {
+      while (container.firstChild) {
+        parent.insertBefore(container.firstChild, container);
+      }
+      parent.removeChild(container);
+    }
+  });
+  
+  const existingMarks = document.querySelectorAll('.word-locator-highlight');
+  existingMarks.forEach(mark => {
+    const parent = mark.parentNode;
+    if (parent) {
+      parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+    }
+  });
+
+  document.body.normalize();
+}
+
 function findMatches(state: AppState) {
   if (isProcessing) return;
   isProcessing = true;
 
-  // Desconectar observador temporalmente para evitar bucles infinitos por nuestras propias modificaciones
+  // Desconectar observador temporalmente
   if (observer) observer.disconnect();
 
   try {
+    // LIMPIAR ANTES DE BUSCAR para evitar fragmentación de nodos de texto
+    // Esto asegura que el contexto extraído sea lo más completo posible
+    clearHighlights();
+
     log('Iniciando búsqueda con palabras:', state.targetWords);
     log('Estado de resaltado:', state.isHighlightEnabled);
     
@@ -114,10 +142,28 @@ function findMatches(state: AppState) {
       while ((match = regex.exec(text)) !== null) {
         const parent = node.parentElement;
         if (parent) {
+          // Intentar obtener un contexto más amplio del padre si el nodo actual es corto
+          let contextText = text;
+          let matchIndex = match.index;
+          
+          // Si el texto del nodo es corto, intentamos usar el texto del padre para dar más contexto
+          // (útil cuando la palabra está dentro de etiquetas como <b>, <i>, <span>, etc.)
+          if (text.length < 150 && parent.textContent && parent.textContent.length > text.length) {
+            const fullParentText = parent.textContent;
+            const nodeIndexInParent = fullParentText.indexOf(text);
+            if (nodeIndexInParent !== -1) {
+              contextText = fullParentText;
+              matchIndex = nodeIndexInParent + match.index;
+            }
+          }
+
           newMatches.push({
             id: `match-${newMatches.length}`,
             text: textToSearch,
-            context: text.substring(Math.max(0, match.index - 100), Math.min(text.length, match.index + match[0].length + 100)),
+            context: contextText.substring(
+              Math.max(0, matchIndex - 100), 
+              Math.min(contextText.length, matchIndex + match[0].length + 100)
+            ).trim().replace(/\s+/g, ' '),
             selector: getUniqueSelector(parent),
             index: match.index
           });
@@ -172,27 +218,8 @@ function getUniqueSelector(el: HTMLElement): string {
 function applyHighlights(state: AppState) {
   log('Aplicando resaltado...');
   
-  // 1. Limpiar resaltados anteriores de forma exhaustiva
-  const existingContainers = document.querySelectorAll('.word-locator-container');
-  existingContainers.forEach(container => {
-    const parent = container.parentNode;
-    if (parent) {
-      while (container.firstChild) {
-        parent.insertBefore(container.firstChild, container);
-      }
-      parent.removeChild(container);
-    }
-  });
-  
-  const existingMarks = document.querySelectorAll('.word-locator-highlight');
-  existingMarks.forEach(mark => {
-    const parent = mark.parentNode;
-    if (parent) {
-      parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
-    }
-  });
-
-  document.body.normalize();
+  // La limpieza ya se hizo en findMatches o se hace aquí si se llama directamente
+  clearHighlights();
 
   if (!state.isHighlightEnabled || state.targetWords.length === 0) return;
 
